@@ -1,48 +1,62 @@
-import * as vscode from 'vscode';
+import { window, Uri, Command, Event, EventEmitter, TreeDataProvider, TreeItem, TreeItemCollapsibleState, workspace } from 'vscode';
 import * as path from 'path';
 import { Metadata, Node } from './scanner/interfaces';
 import { buildTree } from './treeBuilder';
+import { getSymbols } from './scanner';
 
-export class ReactTree implements vscode.TreeDataProvider<Dependency> {
+export class ReactTree implements TreeDataProvider<ReactFile> {
 	symbols: Metadata;
+	nodes: Map<string, Node>;
 	tree: Node[];
-	private _onDidChangeTreeData: vscode.EventEmitter<Dependency | undefined | void> = new vscode.EventEmitter<Dependency | undefined | void>();
-	readonly onDidChangeTreeData: vscode.Event<Dependency | undefined | void> = this._onDidChangeTreeData.event;
+	private _onDidChangeTreeData: EventEmitter<ReactFile | undefined | void> = new EventEmitter<ReactFile | undefined | void>();
+	readonly onDidChangeTreeData: Event<ReactFile | undefined | void> = this._onDidChangeTreeData.event;
 
 	constructor() {
 		this.refresh()
 	}
 
 	refresh(): void {
-		buildTree().then(tree => {
-			this.tree = tree
+		getSymbols().then(({ nodesByLocation }) => {
+			this.nodes = nodesByLocation;
+			this.tree = buildTree(nodesByLocation);
 			this._onDidChangeTreeData.fire();
-			console.log(JSON.stringify(tree))
 		});
 	}
 
-	getTreeItem(element: Dependency): vscode.TreeItem {
-		console.log(element);
+	getTreeItem(element: ReactFile): TreeItem {
 		return element;
 	}
 
-	getChildren(element?: Dependency): Thenable<Dependency[]> {
+	async getChildren(element?: ReactFile): Promise<ReactFile[]> {
+		if (!this.tree)
 		return Promise.resolve([]);
+
+		const nodes = element ? element.savedNode?.children : [this.tree[0]];
+		return nodes.map(node => new ReactFile(
+			node,
+			node.children?.length ? TreeItemCollapsibleState.Expanded : TreeItemCollapsibleState.None
+		));
+	}
+
+	open(element?: ReactFile): void {
+		const uri = Uri.file(element.node.filePath);
+		window.showTextDocument(uri);
 	}
 }
 
-export class Dependency extends vscode.TreeItem {
+export class ReactFile extends TreeItem {
+	savedNode: Node;
 
 	constructor(
-		public readonly label: string,
-		private readonly version: string,
-		public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-		public readonly command?: vscode.Command
+		public readonly node: Node,
+		public readonly collapsibleState: TreeItemCollapsibleState,
+		public readonly command?: Command
 	) {
-		super(label, collapsibleState);
+		super(node.tag, collapsibleState);
 
-		this.tooltip = `${this.label}-${this.version}`;
-		this.description = this.version;
+		this.savedNode = node;
+		this.tooltip = node.tag;
+		this.description = node.relativePath;
 	}
 
 	iconPath = {

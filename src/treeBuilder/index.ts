@@ -1,8 +1,6 @@
-import { getSymbols } from "../scanner";
 import { Node, } from "../scanner/interfaces";
 
-export async function buildTree(): Promise<Node[]> {
-	const { nodesByLocation } = await getSymbols();
+export function buildTree(nodesByLocation: Map<string, Node>): Node[] {
 	const parentNodes = new Map<string, Node>();
 	const childNodes = new Set<string>();
 
